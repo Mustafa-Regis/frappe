@@ -4,6 +4,7 @@
 import datetime
 from math import ceil
 from random import choice
+import unittest
 from unittest.mock import patch
 
 import frappe
@@ -35,6 +36,7 @@ class TestDB(FrappeTestCase):
 	def test_get_database_size(self):
 		self.assertIsInstance(frappe.db.get_database_size(), (float, int))
 
+	@unittest.skipIf(frappe.conf.db_type == "mssql", "Not supported on MSSQL")
 	def test_db_statement_execution_timeout(self):
 		frappe.db.set_execution_timeout(2)
 		# Setting 0 means no timeout.
@@ -77,10 +79,11 @@ class TestDB(FrappeTestCase):
 			frappe.db.get_value("User", {}, "Min(name)", order_by=None),
 			frappe.db.sql("SELECT Min(name) FROM tabUser")[0][0],
 		)
-		self.assertIn(
-			"for update",
-			frappe.db.get_value("User", Field("name") == "Administrator", for_update=True, run=False).lower(),
-		)
+		if frappe.db.db_type != "mssql":
+			self.assertIn(
+				"for update",
+				frappe.db.get_value("User", Field("name") == "Administrator", for_update=True, run=False).lower(),
+			)
 		user_doctype = frappe.qb.DocType("User")
 		self.assertEqual(
 			frappe.qb.from_(user_doctype).select(user_doctype.name, user_doctype.email).run(),
@@ -129,7 +132,7 @@ class TestDB(FrappeTestCase):
 		)
 
 		# test multiple orderby's
-		delimiter = '"' if frappe.db.db_type == "postgres" else "`"
+		delimiter = '"' if frappe.db.db_type in ("postgres", "mssql") else "`"
 		self.assertIn(
 			"ORDER BY {deli}creation{deli} DESC,{deli}modified{deli} ASC,{deli}name{deli} DESC".format(
 				deli=delimiter
@@ -214,7 +217,7 @@ class TestDB(FrappeTestCase):
 		self.assertIn("tabToDo", frappe.flags.touched_tables)
 
 		frappe.flags.touched_tables = set()
-		cf = create_custom_field("ToDo", {"label": "ToDo Custom Field"})
+		cf = create_custom_field("ToDo", {"label": f"ToDo Custom Field {random_string(6)}"})
 		self.assertIn("tabToDo", frappe.flags.touched_tables)
 		self.assertIn("tabCustom Field", frappe.flags.touched_tables)
 		if cf:
@@ -309,6 +312,13 @@ class TestDB(FrappeTestCase):
 				"FORTRAN",
 				"STABLE",
 			],
+			"mssql": [
+				"SELECT",
+				"TABLE",
+				"DEFAULT",
+				"CHECK",
+				"INDEX",
+			],
 		}
 		created_docs = []
 
@@ -375,9 +385,14 @@ class TestDB(FrappeTestCase):
 			),
 			random_field,
 		)
+		expected_count = (
+			""
+			if frappe.conf.db_type == "mssql"
+			else ("count" if frappe.conf.db_type == "postgres" else f"count(`{random_field}`)")
+		)
 		self.assertEqual(
 			next(iter(frappe.get_all("ToDo", fields=[f"count(`{random_field}`)"], limit=1)[0])),
-			"count" if frappe.conf.db_type == "postgres" else f"count(`{random_field}`)",
+			expected_count,
 		)
 
 		# Testing update
@@ -1046,6 +1061,7 @@ class TestReplicaConnections(FrappeTestCase):
 			self.assertEqual(write_connection, db_id())
 
 
+@run_only_if(db_type_is.MARIADB)
 class TestConcurrency(FrappeTestCase):
 	@timeout(5, "There shouldn't be any lock wait")
 	def test_skip_locking(self):

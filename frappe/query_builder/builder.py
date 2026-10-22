@@ -2,8 +2,8 @@ import re
 import types
 import typing
 
-from pypika import MySQLQuery, Order, PostgreSQLQuery, terms
-from pypika.dialects import MySQLQueryBuilder, PostgreSQLQueryBuilder
+from pypika import MSSQLQuery, MySQLQuery, Order, PostgreSQLQuery, terms
+from pypika.dialects import MSSQLQueryBuilder, MySQLQueryBuilder, PostgreSQLQueryBuilder
 from pypika.queries import QueryBuilder, Schema, Table
 from pypika.terms import Function
 
@@ -122,3 +122,48 @@ class Postgres(Base, PostgreSQLQuery):
 			table = cls.DocType(table)
 
 		return super().from_(table, *args, **kwargs)
+
+
+from pypika.utils import builder
+
+
+class FrappeMSSQLQueryBuilder(MSSQLQueryBuilder):
+	@builder
+	def for_update(
+		self, nowait: bool = False, skip_locked: bool = False, of: tuple[str, ...] = ()
+	) -> "QueryBuilder":
+		self._for_update = False
+
+	def _for_update_sql(self, **kwargs) -> str:
+		return ""
+
+	def _apply_pagination(self, querystring: str, **kwargs) -> str:
+		if self._limit is not None or self._offset:
+			if not self._orderbys:
+				if self._distinct:
+					querystring += " ORDER BY 1"
+				else:
+					querystring += " ORDER BY (SELECT NULL)"
+			querystring += self._offset_sql()
+
+		if self._limit is not None:
+			querystring += self._limit_sql()
+
+		return querystring
+
+
+class MSSQL(Base, MSSQLQuery):
+	Field = terms.Field
+	_BuilderClass = FrappeMSSQLQueryBuilder
+	_BuilderClasss = FrappeMSSQLQueryBuilder
+
+	@classmethod
+	def _builder(cls, *args, **kwargs) -> FrappeMSSQLQueryBuilder:
+		return FrappeMSSQLQueryBuilder(*args, wrapper_cls=ParameterizedValueWrapper, **kwargs)
+
+	@classmethod
+	def from_(cls, table, *args, **kwargs):
+		if isinstance(table, str):
+			table = cls.DocType(table)
+		return super().from_(table, *args, **kwargs)
+

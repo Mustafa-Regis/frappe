@@ -49,6 +49,7 @@ class Engine:
 	) -> QueryBuilder:
 		self.is_mariadb = frappe.db.db_type == "mariadb"
 		self.is_postgres = frappe.db.db_type == "postgres"
+		self.is_mssql = frappe.db.db_type == "mssql"
 		self.validate_filters = validate_filters
 
 		if isinstance(table, Table):
@@ -386,6 +387,9 @@ class DynamicTableField:
 		if frappe.db.db_type == "postgres":
 			table_name = table_name.replace("`", '"')
 			fieldname = fieldname.replace("`", '"')
+		elif frappe.db.db_type == "mssql":
+			table_name = f"[tab{self.doctype}]"
+			fieldname = f"[{self.fieldname}]"
 		alias = f"AS {self.alias}" if self.alias else ""
 		return f"{table_name}.{fieldname} {alias}".strip()
 
@@ -400,6 +404,13 @@ class DynamicTableField:
 				if child_doctype == doctype:
 					return
 				return ChildTableField(child_doctype, child_field, doctype, alias=alias)
+			elif field.startswith("[tab"):
+				match = re.search(r'\[tab(.+?)\]\.\[(.+)\]', field)
+				if match:
+					child_doctype, child_field = match.groups()
+					if child_doctype == doctype:
+						return
+					return ChildTableField(child_doctype, child_field, doctype, alias=alias)
 			else:
 				linked_fieldname, fieldname = field.split(".")
 				linked_field = frappe.get_meta(doctype).get_field(linked_fieldname)

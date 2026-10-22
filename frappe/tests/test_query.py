@@ -225,7 +225,7 @@ class TestQuery(FrappeTestCase):
 				filters={"module.app_name": "frappe"},
 			).get_sql(),
 			"SELECT `tabDocType`.`name` FROM `tabDocType` LEFT JOIN `tabModule Def` ON `tabModule Def`.`name`=`tabDocType`.`module` WHERE `tabModule Def`.`app_name`='frappe'".replace(
-				"`", '"' if frappe.db.db_type == "postgres" else "`"
+				"`", '"' if frappe.db.db_type in ("postgres", "mssql") else "`"
 			),
 		)
 
@@ -236,7 +236,7 @@ class TestQuery(FrappeTestCase):
 				filters={"module.app_name": ("like", "frap%")},
 			).get_sql(),
 			"SELECT `tabDocType`.`name` FROM `tabDocType` LEFT JOIN `tabModule Def` ON `tabModule Def`.`name`=`tabDocType`.`module` WHERE `tabModule Def`.`app_name` LIKE 'frap%'".replace(
-				"`", '"' if frappe.db.db_type == "postgres" else "`"
+				"`", '"' if frappe.db.db_type in ("postgres", "mssql") else "`"
 			),
 		)
 
@@ -247,7 +247,7 @@ class TestQuery(FrappeTestCase):
 				filters={"permissions.role": "System Manager"},
 			).get_sql(),
 			"SELECT `tabDocType`.`name` FROM `tabDocType` LEFT JOIN `tabDocPerm` ON `tabDocPerm`.`parent`=`tabDocType`.`name` AND `tabDocPerm`.`parenttype`='DocType' WHERE `tabDocPerm`.`role`='System Manager'".replace(
-				"`", '"' if frappe.db.db_type == "postgres" else "`"
+				"`", '"' if frappe.db.db_type in ("postgres", "mssql") else "`"
 			),
 		)
 
@@ -269,7 +269,7 @@ class TestQuery(FrappeTestCase):
 				filters="",
 			).get_sql(),
 			"SELECT `module` FROM `tabDocType` WHERE `name`=''".replace(
-				"`", '"' if frappe.db.db_type == "postgres" else "`"
+				"`", '"' if frappe.db.db_type in ("postgres", "mssql") else "`"
 			),
 		)
 
@@ -279,7 +279,7 @@ class TestQuery(FrappeTestCase):
 				filters=["ToDo", "Note"],
 			).get_sql(),
 			"SELECT `name` FROM `tabDocType` WHERE `name` IN ('ToDo','Note')".replace(
-				"`", '"' if frappe.db.db_type == "postgres" else "`"
+				"`", '"' if frappe.db.db_type in ("postgres", "mssql") else "`"
 			),
 		)
 
@@ -289,7 +289,7 @@ class TestQuery(FrappeTestCase):
 				filters={"name": ("in", [])},
 			).get_sql(),
 			"SELECT `name` FROM `tabDocType` WHERE `name` IN ('')".replace(
-				"`", '"' if frappe.db.db_type == "postgres" else "`"
+				"`", '"' if frappe.db.db_type in ("postgres", "mssql") else "`"
 			),
 		)
 
@@ -299,7 +299,7 @@ class TestQuery(FrappeTestCase):
 				filters=[1, 2, 3],
 			).get_sql(),
 			"SELECT `name` FROM `tabDocType` WHERE `name` IN (1,2,3)".replace(
-				"`", '"' if frappe.db.db_type == "postgres" else "`"
+				"`", '"' if frappe.db.db_type in ("postgres", "mssql") else "`"
 			),
 		)
 
@@ -308,7 +308,7 @@ class TestQuery(FrappeTestCase):
 				"DocType",
 				filters=[],
 			).get_sql(),
-			"SELECT `name` FROM `tabDocType`".replace("`", '"' if frappe.db.db_type == "postgres" else "`"),
+			"SELECT `name` FROM `tabDocType`".replace("`", '"' if frappe.db.db_type in ("postgres", "mssql") else "`"),
 		)
 
 	def test_implicit_join_query(self):
@@ -321,7 +321,7 @@ class TestQuery(FrappeTestCase):
 				fields=["name", "`tabNote Seen By`.`user` as seen_by"],
 			).get_sql(),
 			"SELECT `tabNote`.`name`,`tabNote Seen By`.`user` `seen_by` FROM `tabNote` LEFT JOIN `tabNote Seen By` ON `tabNote Seen By`.`parent`=`tabNote`.`name` AND `tabNote Seen By`.`parenttype`='Note' WHERE `tabNote`.`name`='Test Note Title'".replace(
-				"`", '"' if frappe.db.db_type == "postgres" else "`"
+				"`", '"' if frappe.db.db_type in ("postgres", "mssql") else "`"
 			),
 		)
 
@@ -332,7 +332,7 @@ class TestQuery(FrappeTestCase):
 				fields=["name", "`tabNote Seen By`.`user` as seen_by", "`tabNote Seen By`.`idx` as idx"],
 			).get_sql(),
 			"SELECT `tabNote`.`name`,`tabNote Seen By`.`user` `seen_by`,`tabNote Seen By`.`idx` `idx` FROM `tabNote` LEFT JOIN `tabNote Seen By` ON `tabNote Seen By`.`parent`=`tabNote`.`name` AND `tabNote Seen By`.`parenttype`='Note' WHERE `tabNote`.`name`='Test Note Title'".replace(
-				"`", '"' if frappe.db.db_type == "postgres" else "`"
+				"`", '"' if frappe.db.db_type in ("postgres", "mssql") else "`"
 			),
 		)
 
@@ -343,7 +343,7 @@ class TestQuery(FrappeTestCase):
 				fields=["name", "seen_by.user as seen_by", "`tabNote Seen By`.`idx` as idx"],
 			).get_sql(),
 			"SELECT `tabNote`.`name`,`tabNote Seen By`.`user` `seen_by`,`tabNote Seen By`.`idx` `idx` FROM `tabNote` LEFT JOIN `tabNote Seen By` ON `tabNote Seen By`.`parent`=`tabNote`.`name` AND `tabNote Seen By`.`parenttype`='Note' WHERE `tabNote`.`name`='Test Note Title'".replace(
-				"`", '"' if frappe.db.db_type == "postgres" else "`"
+				"`", '"' if frappe.db.db_type in ("postgres", "mssql") else "`"
 			),
 		)
 
@@ -353,7 +353,7 @@ class TestQuery(FrappeTestCase):
 				fields=["name", "module.app_name as app_name"],
 			).get_sql(),
 			"SELECT `tabDocType`.`name`,`tabModule Def`.`app_name` `app_name` FROM `tabDocType` LEFT JOIN `tabModule Def` ON `tabModule Def`.`name`=`tabDocType`.`module`".replace(
-				"`", '"' if frappe.db.db_type == "postgres" else "`"
+				"`", '"' if frappe.db.db_type in ("postgres", "mssql") else "`"
 			),
 		)
 

@@ -15,6 +15,10 @@ def setup_database(force, verbose=None, mariadb_user_host_login_scope=None):
 		import frappe.database.postgres.setup_db
 
 		return frappe.database.postgres.setup_db.setup_database()
+	elif frappe.conf.db_type == "mssql":
+		import frappe.database.mssql.setup_db
+
+		return frappe.database.mssql.setup_db.setup_database()
 	else:
 		import frappe.database.mariadb.setup_db
 
@@ -28,6 +32,10 @@ def bootstrap_database(verbose=None, source_sql=None):
 		import frappe.database.postgres.setup_db
 
 		return frappe.database.postgres.setup_db.bootstrap_database(verbose, source_sql)
+	elif frappe.conf.db_type == "mssql":
+		import frappe.database.mssql.setup_db
+
+		return frappe.database.mssql.setup_db.bootstrap_database(verbose, source_sql)
 	else:
 		import frappe.database.mariadb.setup_db
 
@@ -41,6 +49,10 @@ def drop_user_and_database(db_name, root_login=None, root_password=None):
 		import frappe.database.postgres.setup_db
 
 		return frappe.database.postgres.setup_db.drop_user_and_database(db_name, root_login, root_password)
+	elif frappe.conf.db_type == "mssql":
+		import frappe.database.mssql.setup_db
+
+		return frappe.database.mssql.setup_db.drop_user_and_database(db_name, root_login, root_password)
 	else:
 		import frappe.database.mariadb.setup_db
 
@@ -54,6 +66,12 @@ def get_db(host=None, user=None, password=None, port=None, cur_db_name=None, soc
 		import frappe.database.postgres.database
 
 		return frappe.database.postgres.database.PostgresDatabase(
+			host, user, password, port, cur_db_name, socket
+		)
+	elif frappe.conf.db_type == "mssql":
+		import frappe.database.mssql.database
+
+		return frappe.database.mssql.database.MSSQLDatabase(
 			host, user, password, port, cur_db_name, socket
 		)
 	else:

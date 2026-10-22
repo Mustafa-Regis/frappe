@@ -50,6 +50,10 @@ class ParameterizedValueWrapper(ValueWrapper):
 		param_wrapper: NamedParameterWrapper | None = None,
 		**kwargs: Any,
 	) -> str:
+		import frappe
+		if getattr(getattr(frappe, "db", None), "db_type", None) == "mssql" and isinstance(self.value, bool):
+			return "1" if self.value else "0"
+
 		if param_wrapper and isinstance(self.value, str):
 			# add quotes if it's a string value
 			value_sql = self.get_value_sql(quote_char=quote_char, **kwargs)

@@ -9,7 +9,7 @@ from pypika.terms import PseudoColumn
 import frappe
 from frappe.query_builder.terms import NamedParameterWrapper
 
-from .builder import MariaDB, Postgres
+from .builder import MSSQL, MariaDB, Postgres
 
 
 class PseudoColumnMapper(PseudoColumn):
@@ -23,12 +23,15 @@ class PseudoColumnMapper(PseudoColumn):
 			from frappe.database.utils import convert_backtick_identifiers
 
 			return convert_backtick_identifiers(self.name)
+		elif frappe.db.db_type == "mssql":
+			return f"[{self.name.strip('`[]')}]"
 		return self.name
 
 
 class db_type_is(Enum):
 	MARIADB = "mariadb"
 	POSTGRES = "postgres"
+	MSSQL = "mssql"
 
 
 class ImportMapper:
@@ -45,7 +48,7 @@ class BuilderIdentificationFailed(Exception):
 		super().__init__("Couldn't guess builder")
 
 
-def get_query_builder(type_of_db: str) -> Postgres | MariaDB:
+def get_query_builder(type_of_db: str) -> Postgres | MariaDB | MSSQL:
 	"""[return the query builder object]
 
 	Args:
@@ -55,7 +58,7 @@ def get_query_builder(type_of_db: str) -> Postgres | MariaDB:
 	        Query: [Query object]
 	"""
 	db = db_type_is(type_of_db)
-	picks = {db_type_is.MARIADB: MariaDB, db_type_is.POSTGRES: Postgres}
+	picks = {db_type_is.MARIADB: MariaDB, db_type_is.POSTGRES: Postgres, db_type_is.MSSQL: MSSQL}
 	return picks[db]
 
 

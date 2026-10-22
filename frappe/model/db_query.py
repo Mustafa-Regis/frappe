@@ -451,15 +451,17 @@ class DatabaseQuery:
 		if args.conditions:
 			args.conditions = "where " + args.conditions
 
-		if self.distinct:
-			args.fields = "distinct " + args.fields
-			if frappe.db.db_type == "postgres":
-				# PostgreSQL requires ORDER BY expressions to appear in SELECT list when using DISTINCT
+		is_distinct = self.distinct or (bool(args.fields) and args.fields.strip().lower().startswith("distinct"))
+		if is_distinct:
+			if not args.fields.strip().lower().startswith("distinct"):
+				args.fields = "distinct " + args.fields
+			if frappe.db.db_type in ("postgres", "mssql"):
+				# PostgreSQL and MSSQL require ORDER BY expressions to appear in SELECT list when using DISTINCT
 				args.order_by = ""
 
-		# Postgres requires any field that appears in the select clause to also
+		# Postgres and MSSQL require any field that appears in the select clause to also
 		# appear in the order by and group by clause
-		if frappe.db.db_type == "postgres" and args.order_by and args.group_by:
+		if frappe.db.db_type in ("postgres", "mssql") and args.order_by and args.group_by:
 			args = self.prepare_select_args(args)
 
 		query = """select {fields}
@@ -598,6 +600,16 @@ from {tables}
 		self.validate_order_by_and_group_by(args.order_by)
 		self.validate_fieldlevel_permissions_for_sort(args.order_by)
 		args.order_by = (args.order_by and (" order by " + args.order_by)) or ""
+
+		if self.group_by and frappe.db.db_type in ("postgres", "mssql"):
+			# PostgreSQL and MSSQL do not allow aliases in GROUP BY. Map aliases to select expressions.
+			for field in self.fields:
+				if isinstance(field, str) and " as " in field.lower():
+					parts = re.split(r"\s+as\s+", field, flags=re.IGNORECASE)
+					if len(parts) == 2:
+						expr = parts[0].strip()
+						alias = parts[1].strip().strip("`\"[]")
+						self.group_by = re.sub(rf"\b{re.escape(alias)}\b", expr, self.group_by)
 
 		self.validate_order_by_and_group_by(self.group_by)
 		self.validate_fieldlevel_permissions_for_sort(self.group_by)
@@ -1296,7 +1308,7 @@ from {tables}
 			elif (
 				df
 				and (db_type := cstr(frappe.db.type_map.get(df.fieldtype, " ")[0]))
-				and db_type in ("varchar", "text", "longtext", "smalltext", "json")
+				and db_type in ("varchar", "nvarchar", "text", "longtext", "smalltext", "json")
 			) or f.fieldname in ("owner", "modified_by", "parent", "parentfield", "parenttype"):
 				value = cstr(f.value)
 				fallback = "''"
@@ -1690,7 +1702,7 @@ def cast_name(column: str) -> str:
 	input - "ifnull(`tabBlog Post`.`name`, '')=''"
 	output - "ifnull(cast(`tabBlog Post`.`name` as varchar), '')=''" """
 
-	if frappe.db.db_type == "mariadb":
+	if frappe.db.db_type in ("mariadb", "mssql"):
 		return column
 
 	kwargs = {"string": column}

@@ -34,6 +34,16 @@ def create_sequence(
 	query = "create sequence" if not temporary else "create temporary sequence"
 	sequence_name = scrub(doctype_name + slug)
 
+	if db.db_type == "mssql":
+		start = start_value if start_value else 1
+		inc = increment_by if increment_by else 1
+		if check_not_exists:
+			query = f"if not exists (select * from sys.sequences where name = '{sequence_name}') create sequence [{sequence_name}] start with {start} increment by {inc}"
+		else:
+			query = f"create sequence [{sequence_name}] start with {start} increment by {inc}"
+		db.sql_ddl(query)
+		return sequence_name
+
 	if check_not_exists:
 		query += " if not exists"
 
@@ -77,11 +87,15 @@ def get_next_val(doctype_name: str, slug: str = "_id_seq") -> int:
 
 	if db.db_type == "postgres":
 		sequence_name = f"'\"{sequence_name}\"'"
+		sql = f"SELECT nextval({sequence_name})"
 	elif db.db_type == "mariadb":
 		sequence_name = f"`{sequence_name}`"
+		sql = f"SELECT nextval({sequence_name})"
+	elif db.db_type == "mssql":
+		sql = f"SELECT NEXT VALUE FOR [{sequence_name}]"
 
 	try:
-		return db.sql(f"SELECT nextval({sequence_name})")[0][0]
+		return db.sql(sql)[0][0]
 	except IndexError:
 		raise db.SequenceGeneratorLimitExceeded
 
@@ -95,5 +109,7 @@ def set_next_val(
 		{
 			"postgres": f"SELECT SETVAL('\"{scrub(doctype_name + slug)}\"', {next_val}, {is_val_used})",
 			"mariadb": f"SELECT SETVAL(`{scrub(doctype_name + slug)}`, {next_val}, {is_val_used})",
+			"mssql": f"ALTER SEQUENCE [{scrub(doctype_name + slug)}] RESTART WITH {next_val}",
 		}
 	)
+

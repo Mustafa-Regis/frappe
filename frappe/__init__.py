@@ -361,7 +361,8 @@ def get_site_config(sites_path: str | None = None, site_path: str | None = None)
 		return {
 			"mariadb": MariaDBDatabase.default_port,  # 3306
 			"postgres": 5432,
-		}[db_type]
+			"mssql": 1433,
+		}.get(db_type, 1433)
 
 	config["redis_queue"] = (
 		os.environ.get("FRAPPE_REDIS_QUEUE") or config.get("redis_queue") or "redis://127.0.0.1:11311"

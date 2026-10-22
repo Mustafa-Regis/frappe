@@ -201,6 +201,21 @@ def build_table_count_cache():
 	):
 		return
 
+	if frappe.db.db_type == "mssql":
+		data = frappe.db.sql(
+			"""
+			SELECT t.name AS [name], SUM(p.rows) AS [count]
+			FROM sys.tables t
+			JOIN sys.partitions p ON t.object_id = p.object_id
+			WHERE p.index_id IN (0, 1)
+			GROUP BY t.name
+			""",
+			as_dict=True,
+		)
+		counts = {d.get("name").replace("tab", "", 1): d.get("count", None) for d in data}
+		frappe.cache.set_value("information_schema:counts", counts)
+		return counts
+
 	table_name = frappe.qb.Field("table_name").as_("name")
 	table_rows = frappe.qb.Field("table_rows").as_("count")
 	information_schema = frappe.qb.Schema("information_schema")

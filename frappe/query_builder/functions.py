@@ -51,9 +51,21 @@ class Truncate(Function):
 		super().__init__("TRUNCATE", term, decimal, **kwargs)
 
 
-GroupConcat = ImportMapper({db_type_is.MARIADB: GROUP_CONCAT, db_type_is.POSTGRES: STRING_AGG})
+GroupConcat = ImportMapper(
+	{
+		db_type_is.MARIADB: GROUP_CONCAT,
+		db_type_is.POSTGRES: STRING_AGG,
+		db_type_is.MSSQL: STRING_AGG,
+	}
+)
 
-Match = ImportMapper({db_type_is.MARIADB: MATCH, db_type_is.POSTGRES: TO_TSVECTOR})
+Match = ImportMapper(
+	{
+		db_type_is.MARIADB: MATCH,
+		db_type_is.POSTGRES: TO_TSVECTOR,
+		db_type_is.MSSQL: CustomFunction("CONTAINS", ["field", "query"]),
+	}
+)
 
 
 class _PostgresTimestamp(ArithmeticExpression):
@@ -73,6 +85,7 @@ CombineDatetime = ImportMapper(
 	{
 		db_type_is.MARIADB: CustomFunction("TIMESTAMP", ["date", "time"]),
 		db_type_is.POSTGRES: _PostgresTimestamp,
+		db_type_is.MSSQL: CustomFunction("CONCAT", ["date", "time"]),
 	}
 )
 
@@ -80,6 +93,7 @@ DateFormat = ImportMapper(
 	{
 		db_type_is.MARIADB: CustomFunction("DATE_FORMAT", ["date", "format"]),
 		db_type_is.POSTGRES: ToChar,
+		db_type_is.MSSQL: CustomFunction("FORMAT", ["date", "format"]),
 	}
 )
 
@@ -96,6 +110,7 @@ UnixTimestamp = ImportMapper(
 	{
 		db_type_is.MARIADB: CustomFunction("unix_timestamp", ["date"]),
 		db_type_is.POSTGRES: _PostgresUnixTimestamp,
+		db_type_is.MSSQL: CustomFunction("DATEDIFF_BIG", ["second", "start", "date"]),
 	}
 )
 

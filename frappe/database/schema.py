@@ -353,7 +353,7 @@ def get_definition(fieldtype, precision=None, length=None, duckdb=False):
 			size = f"{cint(width)},{cint(precision)}"
 
 		if length:
-			if coltype == "varchar":
+			if coltype in ("varchar", "nvarchar"):
 				# Reference: https://mariadb.com/docs/server/server-usage/storage-engines/innodb/innodb-row-formats/troubleshooting-row-size-too-large-errors-with-innodb
 				if cint(length) < 64:
 					length = 64
@@ -372,6 +372,23 @@ def get_definition(fieldtype, precision=None, length=None, duckdb=False):
 
 def add_column(doctype, column_name, fieldtype, precision=None, length=None, default=None, not_null=False):
 	frappe.db.commit()
+	if frappe.db.db_type == "mssql":
+		table_name = f"tab{doctype}"
+		exists = frappe.db.sql(
+			f"SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('[{table_name}]') AND name = %s",
+			column_name,
+		)
+		if exists:
+			return
+		definition = get_definition(fieldtype, precision, length)
+		if default:
+			definition += f" default '{default}'"
+		if not_null:
+			definition += " not null"
+		query = f"ALTER TABLE [{table_name}] ADD [{column_name}] {definition}"
+		frappe.db.sql(query)
+		return
+
 	query = "alter table `tab{}` add column if not exists {} {}".format(
 		doctype,
 		column_name,

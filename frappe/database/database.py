@@ -47,6 +47,8 @@ IFNULL_PATTERN = re.compile(r"ifnull\(", flags=re.IGNORECASE)
 INDEX_PATTERN = re.compile(r"\s*\([^)]+\)\s*")
 SINGLE_WORD_PATTERN = re.compile(r'([`"]?)(tab([A-Z]\w+))\1')
 MULTI_WORD_PATTERN = re.compile(r'([`"])(tab([A-Z]\w+)( [A-Z]\w+)+)\1')
+MSSQL_SINGLE_WORD_PATTERN = re.compile(r"(\[)(tab([A-Z]\w+))(\])")
+MSSQL_MULTI_WORD_PATTERN = re.compile(r"(\[)(tab([A-Z]\w+)( [A-Z]\w+)+)(\])")
 
 SQL_ITERATOR_BATCH_SIZE = 1000
 
@@ -810,7 +812,7 @@ class Database:
 			"Singles", filters={"field": ("in", tuple(to_update)), "doctype": doctype}, debug=debug
 		)
 
-		singles_data = ((doctype, key, sbool(value)) for key, value in to_update.items())
+		singles_data = ((doctype, key, frappe.utils.cstr(sbool(value))) for key, value in to_update.items())
 		frappe.qb.into("Singles").columns("doctype", "field", "value").insert(*singles_data).run(debug=debug)
 		frappe.clear_document_cache(doctype, doctype)
 
@@ -1451,7 +1453,12 @@ class Database:
 			# e.g. 'tabXxx' or 'tabXxx Xxx' or 'tabXxx Xxx Xxx' and so on
 
 			tables = []
-			for regex in (SINGLE_WORD_PATTERN, MULTI_WORD_PATTERN):
+			for regex in (
+				SINGLE_WORD_PATTERN,
+				MULTI_WORD_PATTERN,
+				MSSQL_SINGLE_WORD_PATTERN,
+				MSSQL_MULTI_WORD_PATTERN,
+			):
 				tables += [groups[1] for groups in regex.findall(query)]
 
 			if frappe.flags.touched_tables is None:
@@ -1475,8 +1482,13 @@ class Database:
 		:params values: iterable of values
 		"""
 		table = frappe.qb.DocType(doctype)
-
 		query = frappe.qb.into(table).columns(fields)
+
+		if frappe.conf.db_type == "mssql":
+			num_fields = max(len(fields), 1)
+			# Respect SQL Server limits: max 2,100 parameters and max 1,000 row value expressions
+			max_chunk = max(1, min(1000, 2000 // num_fields))
+			chunk_size = min(chunk_size, max_chunk)
 
 		if ignore_duplicates:
 			# Pypika does not have same api for ignoring duplicates
@@ -1484,6 +1496,58 @@ class Database:
 				query = query.ignore()
 			elif frappe.conf.db_type == "postgres":
 				query = query.on_conflict().do_nothing()
+			elif frappe.conf.db_type == "mssql":
+				table_name = f"tab{doctype}"
+				cols_str = ", ".join(f"[{f}]" for f in fields)
+				v_cols = ", ".join(f"v.[{f}]" for f in fields)
+				primary_key = fields[0]
+				single_placeholders = ", ".join(["%s"] * len(fields))
+
+				# Stream deduplication across incoming batch to prevent intra-batch duplicate key failures
+				seen_pks = set()
+
+				def deduplicated_stream():
+					for row in values:
+						pk = row[0]
+						if pk in seen_pks:
+							continue
+						seen_pks.add(pk)
+						yield row
+
+				value_iterator = deduplicated_stream()
+				while value_chunk := tuple(itertools.islice(value_iterator, chunk_size)):
+					row_placeholders = []
+					params = []
+					for row in value_chunk:
+						row_placeholders.append("(" + ", ".join(["%s"] * len(row)) + ")")
+						params.extend(row)
+					val_str = ", ".join(row_placeholders)
+					sql = f"""
+						INSERT INTO [{table_name}] ({cols_str})
+						SELECT {v_cols}
+						FROM (VALUES {val_str}) AS v({cols_str})
+						WHERE NOT EXISTS (
+							SELECT 1 FROM [{table_name}] t
+							WHERE t.[{primary_key}] = v.[{primary_key}]
+						)
+					"""
+					try:
+						self.sql(sql, params)
+					except Exception as e:
+						# If a concurrent race condition or secondary unique index collision occurs:
+						if self.is_unique_key_violation(e) or getattr(self, "is_deadlocked", lambda err: False)(e):
+							for row in value_chunk:
+								try:
+									self.sql(
+										f"INSERT INTO [{table_name}] ({cols_str}) VALUES ({single_placeholders})",
+										row,
+									)
+								except Exception as row_err:
+									if not (self.is_unique_key_violation(row_err) or getattr(self, "is_deadlocked", lambda err: False)(row_err)):
+										raise row_err
+						else:
+							raise e
+				return
 
 		value_iterator = iter(values)
 		while value_chunk := tuple(itertools.islice(value_iterator, chunk_size)):

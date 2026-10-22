@@ -685,6 +685,22 @@ class BaseDocument:
 		Returns:
 		        str: The column name associated with the key.
 		"""
+		if frappe.db.db_type == "mssql":
+			res = frappe.db.sql(
+				"""
+				SELECT c.name as Column_name
+				FROM sys.indexes i
+				JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+				JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+				WHERE i.object_id = OBJECT_ID(%s) AND (i.name = %s OR i.name LIKE %s)
+				""",
+				(f"[tab{self.doctype}]", key_name, f"%{key_name}%"),
+				as_dict=True,
+			)
+			if res:
+				return res[0].get("Column_name")
+			return key_name
+
 		return frappe.db.sql(
 			f"""
 			SHOW
@@ -998,7 +1014,7 @@ class BaseDocument:
 
 			column_type = type_map[df.fieldtype][0] or None
 
-			if column_type == "varchar":
+			if column_type in ("varchar", "nvarchar"):
 				default_column_max_length = type_map[df.fieldtype][1] or None
 				max_length = cint(df.get("length")) or cint(default_column_max_length)
 

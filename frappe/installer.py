@@ -151,6 +151,8 @@ def install_db(
 		root_login = "root"
 	elif not root_login and db_type == "postgres":
 		root_login = "postgres"
+	elif not root_login and db_type == "mssql":
+		root_login = "sa"
 
 	make_conf(
 		db_name,

@@ -50,7 +50,7 @@ def is_open(
 	Returns:
 		True if the service is reachable, False otherwise.
 	"""
-	if scheme in ("redis", "rediss", "postgres", "mariadb"):
+	if scheme in ("redis", "rediss", "postgres", "mariadb", "mssql"):
 		if not hostname or not port:
 			return False
 
@@ -81,7 +81,8 @@ def check_database():
 	if db_socket := config.get("db_socket"):
 		return {db_type: is_open("unix", None, None, db_socket)}
 	db_host = config.get("db_host", "127.0.0.1")
-	db_port = config.get("db_port", 3306 if db_type == "mariadb" else 5432)
+	default_port = 1433 if db_type == "mssql" else (3306 if db_type == "mariadb" else 5432)
+	db_port = config.get("db_port", default_port)
 	return {db_type: is_open(db_type, db_host, db_port, None)}
 
 
